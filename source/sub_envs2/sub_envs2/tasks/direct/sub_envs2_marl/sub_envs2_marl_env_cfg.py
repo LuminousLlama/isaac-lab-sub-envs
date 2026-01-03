@@ -11,45 +11,89 @@ from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.sim import SimulationCfg
 from isaaclab.utils import configclass
 
+from isaaclab.assets import RigidObjectCfg
+import isaaclab.sim as sim_utils
+
 
 @configclass
 class SubEnvs2MarlEnvCfg(DirectMARLEnvCfg):
     # env
     decimation = 2
-    episode_length_s = 5.0
-    # multi-agent specification and spaces definition
-    possible_agents = ["cart", "pendulum"]
-    action_spaces = {"cart": 1, "pendulum": 1}
-    observation_spaces = {"cart": 4, "pendulum": 3}
-    state_space = -1
+    episode_length_s = 10.0
+
+    possible_agents = [
+        "cube_red",
+        "cube_green",
+        "cube_blue",
+    ]
+
+    action_spaces = {
+        "cube_red": 1,
+        "cube_green": 1,
+        "cube_blue": 1,
+    }
+
+    observation_spaces = {
+        "cube_red": 3,
+        "cube_green": 3,
+        "cube_blue": 3,
+    }
+
+    state_space = 0
 
     # simulation
     sim: SimulationCfg = SimulationCfg(dt=1 / 120, render_interval=decimation)
 
-    # robot(s)
-    robot_cfg: ArticulationCfg = CART_DOUBLE_PENDULUM_CFG.replace(prim_path="/World/envs/env_.*/Robot")
-
     # scene
-    scene: InteractiveSceneCfg = InteractiveSceneCfg(num_envs=4096, env_spacing=4.0, replicate_physics=True)
+    scene: InteractiveSceneCfg = InteractiveSceneCfg(
+        num_envs=10,
+        env_spacing=4.0,
+        replicate_physics=True,
+    )
 
-    # custom parameters/scales
-    # - controllable joint
-    cart_dof_name = "slider_to_cart"
-    pole_dof_name = "cart_to_pole"
-    pendulum_dof_name = "pole_to_pendulum"
-    # - action scale
-    cart_action_scale = 100.0  # [N]
-    pendulum_action_scale = 50.0  # [Nm]
-    # - reward scales
-    rew_scale_alive = 1.0
-    rew_scale_terminated = -2.0
-    rew_scale_cart_pos = 0
-    rew_scale_cart_vel = -0.01
-    rew_scale_pole_pos = -1.0
-    rew_scale_pole_vel = -0.01
-    rew_scale_pendulum_pos = -1.0
-    rew_scale_pendulum_vel = -0.01
-    # - reset states/conditions
-    initial_pendulum_angle_range = [-0.25, 0.25]  # pendulum angle sample range on reset [rad]
-    initial_pole_angle_range = [-0.25, 0.25]  # pole angle sample range on reset [rad]
-    max_cart_pos = 3.0  # reset if cart exceeds this position [m]
+    cube_size = 0.2
+    cube_mass = 1.0
+
+    color_red = (1.0, 0.0, 0.0)
+    color_green = (0.0, 1.0, 0.0)
+    color_blue = (0.0, 0.0, 1.0)
+
+    initial_pos_red = (0.0, 0.0, 1.0)
+    initial_pos_green = (1.0, 0.0, 1.0)
+    initial_pos_blue = (2.0, 0.0, 1.0)
+
+    red_cube_cfg: RigidObjectCfg = RigidObjectCfg(
+        prim_path="/World/envs/env_.*/RedCube",
+        spawn=sim_utils.CuboidCfg(
+            size=(cube_size, cube_size, cube_size),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+            mass_props=sim_utils.MassPropertiesCfg(mass=cube_mass),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color_red),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=initial_pos_red),
+    )
+
+    green_cube_cfg: RigidObjectCfg = RigidObjectCfg(
+        prim_path="/World/envs/env_.*/GreenCube",
+        spawn=sim_utils.CuboidCfg(
+            size=(cube_size, cube_size, cube_size),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+            mass_props=sim_utils.MassPropertiesCfg(mass=cube_mass),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color_green),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=initial_pos_green),
+    )
+
+    blue_cube_cfg: RigidObjectCfg = RigidObjectCfg(
+        prim_path="/World/envs/env_.*/BlueCube",
+        spawn=sim_utils.CuboidCfg(
+            size=(cube_size, cube_size, cube_size),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
+            mass_props=sim_utils.MassPropertiesCfg(mass=cube_mass),
+            collision_props=sim_utils.CollisionPropertiesCfg(),
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=color_blue),
+        ),
+        init_state=RigidObjectCfg.InitialStateCfg(pos=initial_pos_blue),
+    )

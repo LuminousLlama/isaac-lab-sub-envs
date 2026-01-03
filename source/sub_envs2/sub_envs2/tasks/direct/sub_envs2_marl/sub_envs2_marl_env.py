@@ -17,132 +17,124 @@ from isaaclab.utils.math import sample_uniform
 
 from .sub_envs2_marl_env_cfg import SubEnvs2MarlEnvCfg
 
+from isaaclab.assets import RigidObject
+
 
 class SubEnvs2MarlEnv(DirectMARLEnv):
     cfg: SubEnvs2MarlEnvCfg
 
-    def __init__(self, cfg: SubEnvs2MarlEnvCfg, render_mode: str | None = None, **kwargs):
+    def __init__(
+        self, cfg: SubEnvs2MarlEnvCfg, render_mode: str | None = None, **kwargs
+    ):
         super().__init__(cfg, render_mode, **kwargs)
 
-        self._cart_dof_idx, _ = self.robot.find_joints(self.cfg.cart_dof_name)
-        self._pole_dof_idx, _ = self.robot.find_joints(self.cfg.pole_dof_name)
-        self._pendulum_dof_idx, _ = self.robot.find_joints(self.cfg.pendulum_dof_name)
-
-        self.joint_pos = self.robot.data.joint_pos
-        self.joint_vel = self.robot.data.joint_vel
-
     def _setup_scene(self):
-        self.robot = Articulation(self.cfg.robot_cfg)
+
+        self.cube_red = RigidObject(self.cfg.red_cube_cfg)
+        self.cube_green = RigidObject(self.cfg.green_cube_cfg)
+        self.cube_blue = RigidObject(self.cfg.blue_cube_cfg)
+
+        self.scene.rigid_objects["cube_red"] = self.cube_red
+        self.scene.rigid_objects["cube_green"] = self.cube_green
+        self.scene.rigid_objects["cube_blue"] = self.cube_blue
+
         # add ground plane
         spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
+
         # clone and replicate
         self.scene.clone_environments(copy_from_source=False)
         # we need to explicitly filter collisions for CPU simulation
         if self.device == "cpu":
             self.scene.filter_collisions(global_prim_paths=[])
-        # add articulation to scene
-        self.scene.articulations["robot"] = self.robot
+
         # add lights
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
+
+
 
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
         self.actions = actions
 
     def _apply_action(self) -> None:
-        self.robot.set_joint_effort_target(
-            self.actions["cart"] * self.cfg.cart_action_scale, joint_ids=self._cart_dof_idx
-        )
-        self.robot.set_joint_effort_target(
-            self.actions["pendulum"] * self.cfg.pendulum_action_scale, joint_ids=self._pendulum_dof_idx
-        )
+        action_scale = 1.0
+
+        current_vel_red = self.cube_red.data.root_link_vel_w
+        current_vel_red[:, 2] = self.actions["cube_red"][:, 0] * action_scale
+        # note: this can be applied to only specific envs if needed
+        self.cube_red.write_root_link_velocity_to_sim(current_vel_red)
+
+        current_vel_green = self.cube_green.data.root_link_vel_w
+        current_vel_green[:, 2] = self.actions["cube_green"][:, 0] * action_scale
+        self.cube_green.write_root_link_velocity_to_sim(current_vel_green)
+
+        current_vel_blue = self.cube_blue.data.root_link_vel_w
+        current_vel_blue[:, 2] = self.actions["cube_blue"][:, 0] * action_scale
+        self.cube_blue.write_root_link_velocity_to_sim(current_vel_blue)
 
     def _get_observations(self) -> dict[str, torch.Tensor]:
-        pole_joint_pos = normalize_angle(self.joint_pos[:, self._pole_dof_idx[0]].unsqueeze(dim=1))
-        pendulum_joint_pos = normalize_angle(self.joint_pos[:, self._pendulum_dof_idx[0]].unsqueeze(dim=1))
-        observations = {
-            "cart": torch.cat(
-                (
-                    self.joint_pos[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
-                    self.joint_vel[:, self._cart_dof_idx[0]].unsqueeze(dim=1),
-                    pole_joint_pos,
-                    self.joint_vel[:, self._pole_dof_idx[0]].unsqueeze(dim=1),
-                ),
-                dim=-1,
-            ),
-            "pendulum": torch.cat(
-                (
-                    pole_joint_pos + pendulum_joint_pos,
-                    pendulum_joint_pos,
-                    self.joint_vel[:, self._pendulum_dof_idx[0]].unsqueeze(dim=1),
-                ),
-                dim=-1,
-            ),
+        obs = {
+            "cube_red": self.cube_red.data.root_pos_w,
+            "cube_green": self.cube_green.data.root_pos_w,
+            "cube_blue": self.cube_blue.data.root_pos_w,
         }
-        return observations
+
+        return obs
 
     def _get_rewards(self) -> dict[str, torch.Tensor]:
-        total_reward = compute_rewards(
-            self.cfg.rew_scale_alive,
-            self.cfg.rew_scale_terminated,
-            self.cfg.rew_scale_cart_pos,
-            self.cfg.rew_scale_cart_vel,
-            self.cfg.rew_scale_pole_pos,
-            self.cfg.rew_scale_pole_vel,
-            self.cfg.rew_scale_pendulum_pos,
-            self.cfg.rew_scale_pendulum_vel,
-            self.joint_pos[:, self._cart_dof_idx[0]],
-            self.joint_vel[:, self._cart_dof_idx[0]],
-            normalize_angle(self.joint_pos[:, self._pole_dof_idx[0]]),
-            self.joint_vel[:, self._pole_dof_idx[0]],
-            normalize_angle(self.joint_pos[:, self._pendulum_dof_idx[0]]),
-            self.joint_vel[:, self._pendulum_dof_idx[0]],
-            math.prod(self.terminated_dict.values()),
-        )
-        return total_reward
+        reward = {
+            "cube_red": torch.zeros(self.num_envs, device=self.device),
+            "cube_green": torch.zeros(self.num_envs, device=self.device),
+            "cube_blue": torch.zeros(self.num_envs, device=self.device),
+        }
+
+        return reward
 
     def _get_dones(self) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
-        self.joint_pos = self.robot.data.joint_pos
-        self.joint_vel = self.robot.data.joint_vel
+        terminated = {
+            "cube_red": torch.zeros(
+                self.num_envs, dtype=torch.bool, device=self.device
+            ),
+            "cube_green": torch.zeros(
+                self.num_envs, dtype=torch.bool, device=self.device
+            ),
+            "cube_blue": torch.zeros(
+                self.num_envs, dtype=torch.bool, device=self.device
+            ),
+        }
 
-        time_out = self.episode_length_buf >= self.max_episode_length - 1
-        out_of_bounds = torch.any(torch.abs(self.joint_pos[:, self._cart_dof_idx]) > self.cfg.max_cart_pos, dim=1)
-        out_of_bounds = out_of_bounds | torch.any(torch.abs(self.joint_pos[:, self._pole_dof_idx]) > math.pi / 2, dim=1)
+        # TODO this needs to change for sub envs
+        truncated = {
+            "cube_red": self.episode_length_buf >= self.max_episode_length,
+            "cube_green": self.episode_length_buf >= self.max_episode_length,
+            "cube_blue": self.episode_length_buf >= self.max_episode_length,
+        }
 
-        terminated = {agent: out_of_bounds for agent in self.cfg.possible_agents}
-        time_outs = {agent: time_out for agent in self.cfg.possible_agents}
-        return terminated, time_outs
+        return terminated, truncated
 
     def _reset_idx(self, env_ids: Sequence[int] | None):
         if env_ids is None:
-            env_ids = self.robot._ALL_INDICES
+            env_ids = self.cube_red._ALL_INDICES
+            
         super()._reset_idx(env_ids)
 
-        joint_pos = self.robot.data.default_joint_pos[env_ids]
-        joint_pos[:, self._pole_dof_idx] += sample_uniform(
-            self.cfg.initial_pole_angle_range[0] * math.pi,
-            self.cfg.initial_pole_angle_range[1] * math.pi,
-            joint_pos[:, self._pole_dof_idx].shape,
-            joint_pos.device,
-        )
-        joint_pos[:, self._pendulum_dof_idx] += sample_uniform(
-            self.cfg.initial_pendulum_angle_range[0] * math.pi,
-            self.cfg.initial_pendulum_angle_range[1] * math.pi,
-            joint_pos[:, self._pendulum_dof_idx].shape,
-            joint_pos.device,
-        )
-        joint_vel = self.robot.data.default_joint_vel[env_ids]
+        # TODO this needs to change for sub envs
+        default_red_state = self.cube_red.data.default_root_state[env_ids].clone()
+        default_red_state[:, :3] += self.scene.env_origins[env_ids]
+        
+        default_green_state = self.cube_green.data.default_root_state[env_ids].clone()
+        default_green_state[:, :3] += self.scene.env_origins[env_ids]
+        
+        default_blue_state = self.cube_blue.data.default_root_state[env_ids].clone()
+        default_blue_state[:, :3] += self.scene.env_origins[env_ids]
 
-        default_root_state = self.robot.data.default_root_state[env_ids]
-        default_root_state[:, :3] += self.scene.env_origins[env_ids]
+        self.cube_red.write_root_pose_to_sim(default_red_state[:, :7], env_ids)
+        self.cube_green.write_root_pose_to_sim(default_green_state[:, :7], env_ids)
+        self.cube_blue.write_root_pose_to_sim(default_blue_state[:, :7], env_ids)
 
-        self.joint_pos[env_ids] = joint_pos
-        self.joint_vel[env_ids] = joint_vel
-
-        self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
-        self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
-        self.robot.write_joint_state_to_sim(joint_pos, joint_vel, None, env_ids)
-
+        self.cube_red.write_root_velocity_to_sim(default_red_state[:, 7:], env_ids)
+        self.cube_green.write_root_velocity_to_sim(default_green_state[:, 7:], env_ids)
+        self.cube_blue.write_root_velocity_to_sim(default_blue_state[:, 7:], env_ids)
 
 @torch.jit.script
 def normalize_angle(angle):
@@ -169,16 +161,28 @@ def compute_rewards(
 ):
     rew_alive = rew_scale_alive * (1.0 - reset_terminated.float())
     rew_termination = rew_scale_terminated * reset_terminated.float()
-    rew_pole_pos = rew_scale_pole_pos * torch.sum(torch.square(pole_pos).unsqueeze(dim=1), dim=-1)
+    rew_pole_pos = rew_scale_pole_pos * torch.sum(
+        torch.square(pole_pos).unsqueeze(dim=1), dim=-1
+    )
     rew_pendulum_pos = rew_scale_pendulum_pos * torch.sum(
         torch.square(pole_pos + pendulum_pos).unsqueeze(dim=1), dim=-1
     )
-    rew_cart_vel = rew_scale_cart_vel * torch.sum(torch.abs(cart_vel).unsqueeze(dim=1), dim=-1)
-    rew_pole_vel = rew_scale_pole_vel * torch.sum(torch.abs(pole_vel).unsqueeze(dim=1), dim=-1)
-    rew_pendulum_vel = rew_scale_pendulum_vel * torch.sum(torch.abs(pendulum_vel).unsqueeze(dim=1), dim=-1)
+    rew_cart_vel = rew_scale_cart_vel * torch.sum(
+        torch.abs(cart_vel).unsqueeze(dim=1), dim=-1
+    )
+    rew_pole_vel = rew_scale_pole_vel * torch.sum(
+        torch.abs(pole_vel).unsqueeze(dim=1), dim=-1
+    )
+    rew_pendulum_vel = rew_scale_pendulum_vel * torch.sum(
+        torch.abs(pendulum_vel).unsqueeze(dim=1), dim=-1
+    )
 
     total_reward = {
-        "cart": rew_alive + rew_termination + rew_pole_pos + rew_cart_vel + rew_pole_vel,
+        "cart": rew_alive
+        + rew_termination
+        + rew_pole_pos
+        + rew_cart_vel
+        + rew_pole_vel,
         "pendulum": rew_alive + rew_termination + rew_pendulum_pos + rew_pendulum_vel,
     }
     return total_reward

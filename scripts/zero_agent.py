@@ -14,9 +14,14 @@ from isaaclab.app import AppLauncher
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Zero agent for Isaac Lab environments.")
 parser.add_argument(
-    "--disable_fabric", action="store_true", default=False, help="Disable fabric and use USD I/O operations."
+    "--disable_fabric",
+    action="store_true",
+    default=False,
+    help="Disable fabric and use USD I/O operations.",
 )
-parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
+parser.add_argument(
+    "--num_envs", type=int, default=None, help="Number of environments to simulate."
+)
 parser.add_argument("--task", type=str, default=None, help="Name of the task.")
 # append AppLauncher cli args
 AppLauncher.add_app_launcher_args(parser)
@@ -42,7 +47,10 @@ def main():
     """Zero actions agent with Isaac Lab environment."""
     # parse configuration
     env_cfg = parse_env_cfg(
-        args_cli.task, device=args_cli.device, num_envs=args_cli.num_envs, use_fabric=not args_cli.disable_fabric
+        args_cli.task,
+        device=args_cli.device,
+        num_envs=args_cli.num_envs,
+        use_fabric=not args_cli.disable_fabric,
     )
     # create environment
     env = gym.make(args_cli.task, cfg=env_cfg)
@@ -53,11 +61,24 @@ def main():
     # reset environment
     env.reset()
     # simulate environment
+
+    # needed to access multi env properties
+    base_env = env.unwrapped
+
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
+            actions = {}
+
+            for agent in base_env.possible_agents:
+                space = base_env.action_space(agent)
+                act_shape = (base_env.num_envs, *space.shape)
+                actions[agent] = 2.0 * torch.rand(act_shape, device=base_env.device) - 1.0
+
             # compute zero actions
-            actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
+            # print("------ action space: ", env.action_space)
+            # print("------ action space type: ", type(env.action_space))
+            # actions = torch.zeros(env.action_space.shape, device=env.unwrapped.device)
             # apply actions
             env.step(actions)
 
