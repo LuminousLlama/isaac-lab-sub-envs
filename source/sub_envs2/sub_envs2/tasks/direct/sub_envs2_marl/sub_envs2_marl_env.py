@@ -29,9 +29,19 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
         self, cfg: SubEnvs2MarlEnvCfg, render_mode: str | None = None, **kwargs
     ):
 
+        # create and add sub scenes to dict. Need to call this before super because super calls other functions like _setup_scene()
+        self.sub_scene_0 = SubScene0(self, 0)
+        self.sub_scene_1 = SubScene1(self, 1)
+        self.sub_scene_2 = SubScene2(self, 2)
+        self.sub_scenes_dict = {
+            "cube_red": self.sub_scene_0,
+            "cube_green": self.sub_scene_1,
+            "cube_blue": self.sub_scene_2,
+        }
+        self.num_sub_envs = 3
+
         super().__init__(cfg, render_mode, **kwargs)
 
-        self.num_sub_envs = 1
         self.temp_reset_count = 0
         self.sub_scene_episode_length_buf = torch.zeros(
             self.num_sub_envs, self.num_envs, device=self.device
@@ -61,11 +71,10 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
         light_cfg.func("/World/Light", light_cfg)
 
         # setup sub scenes
-        self.sub_scene_0 = SubScene0(self, 0)
 
         self.sub_scene_0._rigid_objects["cube_red"] = self.cube_red
-
-        self.sub_scenes_dict = {"cube_red": self.sub_scene_0}
+        self.sub_scene_1._rigid_objects["cube_green"] = self.cube_green
+        self.sub_scene_2._rigid_objects["cube_blue"] = self.cube_blue
 
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
         self.actions = actions
@@ -119,10 +128,11 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
 
         # TODO this needs to change for sub envs
         truncated = {
-            # "cube_red": self.episode_length_buf >= self.max_episode_length,
             "cube_red": self.sub_scene_episode_length_buf[0] >= self.max_episode_length,
-            "cube_green": self.episode_length_buf >= self.max_episode_length,
-            "cube_blue": self.episode_length_buf >= self.max_episode_length,
+            "cube_green": self.sub_scene_episode_length_buf[1]
+            >= self.max_episode_length / 2,
+            "cube_blue": self.sub_scene_episode_length_buf[2]
+            >= self.max_episode_length / 4,
         }
 
         return terminated, truncated
@@ -313,3 +323,29 @@ class SubScene0(subscene.SubScene):
 
         cube_red.write_root_pose_to_sim(default_red_state[:, :7], env_ids)
         cube_red.write_root_velocity_to_sim(default_red_state[:, 7:], env_ids)
+
+
+class SubScene1(subscene.SubScene):
+
+    def _reset(self, env_ids):
+        super()._reset(env_ids)
+
+        cube_green: RigidObject = self._rigid_objects["cube_green"]
+        default_green_state = cube_green.data.default_root_state[env_ids].clone()
+        default_green_state[:, :3] += self.env.scene.env_origins[env_ids]
+
+        cube_green.write_root_pose_to_sim(default_green_state[:, :7], env_ids)
+        cube_green.write_root_velocity_to_sim(default_green_state[:, 7:], env_ids)
+
+
+class SubScene2(subscene.SubScene):
+
+    def _reset(self, env_ids):
+        super()._reset(env_ids)
+
+        cube_blue: RigidObject = self._rigid_objects["cube_blue"]
+        default_blue_state = cube_blue.data.default_root_state[env_ids].clone()
+        default_blue_state[:, :3] += self.env.scene.env_origins[env_ids]
+
+        cube_blue.write_root_pose_to_sim(default_blue_state[:, :7], env_ids)
+        cube_blue.write_root_velocity_to_sim(default_blue_state[:, 7:], env_ids)
