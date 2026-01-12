@@ -19,7 +19,7 @@ import isaaclab.sim as sim_utils
 class SubEnvs2MarlEnvCfg(DirectMARLEnvCfg):
     # env
     decimation = 2
-    episode_length_s = 10.0
+    episode_length_s = 2.0
 
     possible_agents = [
         "cube_red",
