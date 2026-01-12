@@ -73,7 +73,8 @@ def main():
             for agent in base_env.possible_agents:
                 space = base_env.action_space(agent)
                 act_shape = (base_env.num_envs, *space.shape)
-                actions[agent] = 2.0 * torch.rand(act_shape, device=base_env.device) - 1.0
+                # actions[agent] = 2.0 * torch.rand(act_shape, device=base_env.device) - 1.0
+                actions[agent] = torch.ones(act_shape, device=base_env.device)
 
             # compute zero actions
             # print("------ action space: ", env.action_space)
