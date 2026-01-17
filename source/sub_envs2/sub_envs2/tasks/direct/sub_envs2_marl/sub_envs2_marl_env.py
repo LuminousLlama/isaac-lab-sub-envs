@@ -19,10 +19,9 @@ from .sub_envs2_marl_env_cfg import SubEnvs2MarlEnvCfg
 
 from isaaclab.assets import RigidObject
 
-from sub_envs2.subscene import SubScene
-
 from isaaclab.envs.common import ActionType, AgentID, EnvStepReturn, ObsType, StateType
 
+from sub_envs2.sub_env import SubEnv
 
 class SubEnvs2MarlEnv(DirectMARLEnv):
     cfg: SubEnvs2MarlEnvCfg
@@ -31,20 +30,20 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
         self, cfg: SubEnvs2MarlEnvCfg, render_mode: str | None = None, **kwargs
     ):
 
-        # create and add sub scenes to dict. Need to call this before super because super calls other functions like _setup_scene()
-        self.sub_scene_0 = SubScene0(self, 0)
-        self.sub_scene_1 = SubScene1(self, 1)
-        self.sub_scene_2 = SubScene2(self, 2)
-        self.sub_scenes_dict = {
-            "cube_red": self.sub_scene_0,
-            "cube_green": self.sub_scene_1,
-            "cube_blue": self.sub_scene_2,
+        # create and add sub envs to dict. Need to call this before super because super calls other functions like _setup_scene()
+        self.sub_env_0 = SubEnv0(self, 0)
+        self.sub_env_1 = SubEnv1(self, 1)
+        self.sub_env_2 = SubEnv2(self, 2)
+        self.sub_envs_dict = {
+            "cube_red": self.sub_env_0,
+            "cube_green": self.sub_env_1,
+            "cube_blue": self.sub_env_2,
         }
         self.num_sub_envs = 3
 
         super().__init__(cfg, render_mode, **kwargs)
 
-        self.sub_scene_episode_length_buf = torch.zeros(
+        self.sub_envs_episode_length_buf = torch.zeros(
             self.num_sub_envs, self.num_envs, device=self.device
         )
 
@@ -71,26 +70,26 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-        # setup sub scenes
-        self.sub_scene_0._rigid_objects["cube_red"] = self.cube_red
-        self.sub_scene_1._rigid_objects["cube_green"] = self.cube_green
-        self.sub_scene_2._rigid_objects["cube_blue"] = self.cube_blue
+        # setup sub envs
+        self.sub_env_0._rigid_objects["cube_red"] = self.cube_red
+        self.sub_env_1._rigid_objects["cube_green"] = self.cube_green
+        self.sub_env_2._rigid_objects["cube_blue"] = self.cube_blue
 
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
-        for name, sub_env in self.sub_scenes_dict.items():
-            sub_env: SubScene
+        for name, sub_env in self.sub_envs_dict.items():
+            sub_env: SubEnv 
             sub_env.actions = actions[name]
 
     def _apply_action(self) -> None:
         
-        for sub_env in self.sub_scenes_dict.values():
-            sub_env: SubScene
+        for sub_env in self.sub_envs_dict.values():
+            sub_env: SubEnv
             sub_env._apply_action()
 
     def _get_observations(self) -> dict[str, torch.Tensor]:
         obs = {}
-        for name, sub_env in self.sub_scenes_dict.items():
-            sub_env: SubScene
+        for name, sub_env in self.sub_envs_dict.items():
+            sub_env: SubEnv
             obs[name] = sub_env._get_observations()
 
         return obs
@@ -98,25 +97,25 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
     def _get_rewards(self) -> dict[str, torch.Tensor]:
         rewards = {}
         
-        for name, sub_env in self.sub_scenes_dict.items():
-            sub_env: SubScene
+        for name, sub_env in self.sub_envs_dict.items():
+            sub_env: SubEnv
             rewards[name] = sub_env._get_rewards()
                 
         return rewards
 
     def _get_dones(self) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         terminated = {}
-        for name, sub_env in self.sub_scenes_dict.items():
-            sub_env: SubScene
+        for name, sub_env in self.sub_envs_dict.items():
+            sub_env: SubEnv
             terminated[name] = sub_env._get_terminated()
 
         truncated = {
             "cube_red": torch.zeros(
                 self.num_envs, dtype=torch.bool, device=self.device
             ),
-            "cube_green": self.sub_scene_episode_length_buf[1]
+            "cube_green": self.sub_envs_episode_length_buf[1]
             >= self.max_episode_length / 2,
-            "cube_blue": self.sub_scene_episode_length_buf[2]
+            "cube_blue": self.sub_envs_episode_length_buf[2]
             >= self.max_episode_length / 3,
         }
 
@@ -147,11 +146,11 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
         # reset state of scene
         indices = torch.arange(self.num_envs, dtype=torch.int64, device=self.device)
         # ----------------
-        # !!! This has been modified to be sub scene aware
+        # !!! This has been modified to be sub env aware
         # ----------------
-        for subscene in self.sub_scenes_dict.values():
-            subscene: SubScene
-            subscene._reset(indices)
+        for sub_envs in self.sub_envs_dict.values():
+            sub_envs: SubEnv
+            sub_envs._reset(indices)
 
         # update observations and the list of current agents (sorted as in possible_agents)
         self.obs_dict = self._get_observations()
@@ -233,8 +232,8 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
         # -------------------
         #  !!! this code has changed to be sub scene aware
         # -------------------
-        self.sub_scene_episode_length_buf[:] += 1
-        self.reset_sub_scenes()
+        self.sub_envs_episode_length_buf[:] += 1
+        self.reset_sub_envs()
 
         # post-step: step interval event
         if self.cfg.events:
@@ -263,18 +262,18 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
             self.extras,
         )
 
-    def reset_sub_scenes(self):
+    def reset_sub_envs(self):
         # loop through all sub scenes
-        for key in self.sub_scenes_dict.keys():
+        for key in self.sub_envs_dict.keys():
             reset_buf = self.terminated_dict[key] | self.time_out_dict[key]
             reset_env_ids = reset_buf.nonzero(as_tuple=False).squeeze(-1)
-            self.sub_scenes_dict[key]._reset(reset_env_ids)
+            self.sub_envs_dict[key]._reset(reset_env_ids)
 
 
 # ---------
-# sub scenes
+# sub envs
 # ---------
-class SubScene0(SubScene):
+class SubEnv0(SubEnv):
 
     def _apply_action(self):
         self.cube_red: RigidObject = self._rigid_objects["cube_red"]
@@ -303,7 +302,7 @@ class SubScene0(SubScene):
         self.cube_red.write_root_velocity_to_sim(default_red_state[:, 7:], env_ids)
 
 
-class SubScene1(SubScene):
+class SubEnv1(SubEnv):
 
     def _apply_action(self):
         self.cube_green: RigidObject = self._rigid_objects["cube_green"]
@@ -332,7 +331,7 @@ class SubScene1(SubScene):
         self.cube_green.write_root_velocity_to_sim(default_green_state[:, 7:], env_ids)
 
 
-class SubScene2(SubScene):
+class SubEnv2(SubEnv):
 
     def _apply_action(self):
         self.cube_blue: RigidObject = self._rigid_objects["cube_blue"]

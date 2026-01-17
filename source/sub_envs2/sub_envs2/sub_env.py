@@ -8,7 +8,7 @@ import torch
 
 import gymnasium as gym
 
-class SubScene:
+class SubEnv:
    
     def __init__(self, env: gym.Env, subscene_idx: int):
         self.env: gym.Env  = env
@@ -38,7 +38,7 @@ class SubScene:
 
     
 
-    
+    # TODO still need to add some features here like resetting the noise model
     def _reset(self, env_ids: Sequence[int]):
         # -- assets
         for articulation in self._articulations.values():
@@ -55,7 +55,7 @@ class SubScene:
         for sensor in self._sensors.values():
             sensor.reset(env_ids)
             
-        self.env.sub_scene_episode_length_buf[self.subscene_idx][env_ids] = 0
+        self.env.sub_envs_episode_length_buf[self.subscene_idx][env_ids] = 0
 
 
     
