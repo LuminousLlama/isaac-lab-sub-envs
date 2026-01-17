@@ -3,11 +3,15 @@
 from collections.abc import Sequence
 from isaaclab.scene.interactive_scene import InteractiveScene
 
+import torch
+
+
+import gymnasium as gym
 
 class SubScene:
    
-    def __init__(self, env, subscene_idx: int):
-        self.env = env
+    def __init__(self, env: gym.Env, subscene_idx: int):
+        self.env: gym.Env  = env
         self.subscene_idx = subscene_idx
         
         self._articulations = dict()
@@ -17,6 +21,23 @@ class SubScene:
         self._sensors = dict()
         self._surface_grippers = dict()
         self._extras = dict()
+        
+        self.actions: torch.Tensor = None
+        
+    def _apply_action(self) -> None:
+        pass
+
+    def _get_observations(self) -> torch.tensor:
+        pass
+
+    def _get_rewards(self) -> torch.tensor:
+        pass
+
+    def _get_terminated(self) -> torch.tensor:
+        pass
+
+    
+
     
     def _reset(self, env_ids: Sequence[int]):
         # -- assets
