@@ -19,53 +19,26 @@ import isaaclab.sim as sim_utils
 
 from isaaclab.utils.assets import ISAAC_NUCLEUS_DIR
 
+from isaaclab.envs.mdp.actions import JointPositionActionCfg, JointVelocityActionCfg
+
+
+import numpy as np
+
+SUB_ENV_OFFSET = np.array([0, 2.0, 0.0])
+
+ROBOT_INIT_POS = np.array([-0.5, 0.0, 0.8])
+
+TABLE_SCALE = [1.0, 1.5, 1.0]
+TABLE_USD_PATH = f"{ISAAC_NUCLEUS_DIR}/IsaacLab/Mimic/exhaust_pipe_task/exhaust_pipe_assets/table.usd"
+TABLE_INIT_POS = np.array([0.0, 0.0, 0.0])
 
 @configclass
 class SubEnvs2SceneCfg(InteractiveSceneCfg):
     """Scene configuration for SubEnvs2 with robot and table."""
 
-    # Red cube
-    red_cube: RigidObjectCfg = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/RedCube",
-        spawn=sim_utils.CuboidCfg(
-            size=(0.2, 0.2, 0.2),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0)),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 1.0)),
-    )
-
-    # Green cube
-    green_cube: RigidObjectCfg = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/GreenCube",
-        spawn=sim_utils.CuboidCfg(
-            size=(0.2, 0.2, 0.2),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 1.0, 0.0)),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(1.0, 0.0, 1.0)),
-    )
-
-    # Blue cube
-    blue_cube: RigidObjectCfg = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/BlueCube",
-        spawn=sim_utils.CuboidCfg(
-            size=(0.2, 0.2, 0.2),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(),
-            mass_props=sim_utils.MassPropertiesCfg(mass=1.0),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.0, 0.0, 1.0)),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(2.0, 0.0, 1.0)),
-    )
-
-    # Robot
-    robot: ArticulationCfg = ArticulationCfg(
-        prim_path="{ENV_REGEX_NS}/RobotTest",
+    # Spawn robots
+    robot_ability: ArticulationCfg = ArticulationCfg(
+        prim_path="{ENV_REGEX_NS}/RobotAbility",
         spawn=sim_utils.UsdFileCfg(
             usd_path="source/sub_envs2/assets/ability_robot_test.usd",
             activate_contact_sensors=True,
@@ -74,7 +47,35 @@ class SubEnvs2SceneCfg(InteractiveSceneCfg):
             ),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
-            pos=[-0.5, 0.0, 0.75],
+            pos= (ROBOT_INIT_POS + 0 * SUB_ENV_OFFSET).tolist(),
+        ),
+        
+        # TODO this needs to actually reflect the mimic / under actuation of ability 
+        actuators={
+            "all_joints": ImplicitActuatorCfg(
+                joint_names_expr=[".*"],
+                effort_limit=400.0,
+                velocity_limit=100.0,
+                stiffness=80.0,
+                damping=10.0,
+            ),
+        },
+    )
+    
+    
+    
+
+    robot_shadow: ArticulationCfg = ArticulationCfg(
+        prim_path="{ENV_REGEX_NS}/RobotShadow",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path="source/sub_envs2/assets/rm65_shadow_right.usd",
+            activate_contact_sensors=True,
+            articulation_props=sim_utils.ArticulationRootPropertiesCfg(
+                fix_root_link=True,
+            ),
+        ),
+        init_state=ArticulationCfg.InitialStateCfg(
+            pos=(ROBOT_INIT_POS + 1 * SUB_ENV_OFFSET).tolist(),
             joint_pos={".*": 0.0},
         ),
         actuators={
@@ -82,21 +83,34 @@ class SubEnvs2SceneCfg(InteractiveSceneCfg):
                 joint_names_expr=[".*"],
                 effort_limit=400.0,
                 velocity_limit=100.0,
-                stiffness=0.0,
+                stiffness=80.0,
                 damping=10.0,
             ),
         },
     )
 
-    # Table (static asset)
-    table: AssetBaseCfg = AssetBaseCfg(
-        prim_path="{ENV_REGEX_NS}/Table",
+
+    # TABLES
+    table_ability: AssetBaseCfg = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/TableAbility",
         spawn=sim_utils.UsdFileCfg(
-            usd_path=f"{ISAAC_NUCLEUS_DIR}/IsaacLab/Mimic/exhaust_pipe_task/exhaust_pipe_assets/table.usd",
-            scale=[1.0, 1.5, 1.0],
+            usd_path=TABLE_USD_PATH,
+            scale=TABLE_SCALE,
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos=[0.0, 0.0, 0.0],
+            pos= (TABLE_INIT_POS + 0 * SUB_ENV_OFFSET).tolist(),
+        ),
+    )
+    
+    
+    table_shadow: AssetBaseCfg = AssetBaseCfg(
+        prim_path="{ENV_REGEX_NS}/TableShadow",
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=TABLE_USD_PATH,
+            scale=TABLE_SCALE,
+        ),
+        init_state=AssetBaseCfg.InitialStateCfg(
+            pos=(TABLE_INIT_POS + 1 * SUB_ENV_OFFSET).tolist(),
         ),
     )
 
@@ -107,9 +121,9 @@ class SubEnvs2MarlEnvCfg(DirectMARLEnvCfg):
     decimation = 2
     episode_length_s = 2.0
 
-    possible_agents = ["cube_red", "cube_green", "cube_blue"]
-    action_spaces = {"cube_red": 1, "cube_green": 1, "cube_blue": 1}
-    observation_spaces = {"cube_red": 3, "cube_green": 3, "cube_blue": 3}
+    possible_agents = ["ability", "shadow"]
+    action_spaces = {"ability": 16, "shadow": 1} # TODO SHADOW
+    observation_spaces = {"ability": 3, "shadow": 3}
     state_space = 0
 
     # simulation
@@ -118,6 +132,7 @@ class SubEnvs2MarlEnvCfg(DirectMARLEnvCfg):
     # scene - use the custom scene config
     scene: SubEnvs2SceneCfg = SubEnvs2SceneCfg(
         num_envs=10,
-        env_spacing=4.0,
+        env_spacing=10.0,
         replicate_physics=True,
     )
+    
