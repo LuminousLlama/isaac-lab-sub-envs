@@ -49,25 +49,28 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
 
     def _setup_scene(self):
 
-        self.cube_red = RigidObject(self.cfg.red_cube_cfg)
-        self.cube_green = RigidObject(self.cfg.green_cube_cfg)
-        self.cube_blue = RigidObject(self.cfg.blue_cube_cfg)
+        # self.cube_red = RigidObject(self.cfg.red_cube_cfg)
+        # self.cube_green = RigidObject(self.cfg.green_cube_cfg)
+        # self.cube_blue = RigidObject(self.cfg.blue_cube_cfg)
 
-        self.table = RigidObject(self.cfg.table_cfg)
-        self.side_panel = RigidObject(self.cfg.side_panel_cfg)
+        # self.table = RigidObject(self.cfg.table_test)
         
-        self.robot_test = Articulation(self.cfg.robot_cfg)
+        # self.robot_test = Articulation(self.cfg.robot_cfg)
         
         # clone and replicate
-        self.scene.clone_environments(copy_from_source=False)
+        # self.scene.clone_environments(copy_from_source=False)
 
-        self.scene.articulations["robot_test"] = self.robot_test
+        # self.scene.articulations["robot_test"] = self.robot_test
         
-        self.scene.rigid_objects["cube_red"] = self.cube_red
-        self.scene.rigid_objects["cube_green"] = self.cube_green
-        self.scene.rigid_objects["cube_blue"] = self.cube_blue
-        self.scene.rigid_objects["table"] = self.table
-        self.scene.rigid_objects["side_panel"] = self.side_panel
+        # self.scene.rigid_objects["cube_red"] = self.cube_red
+        # self.scene.rigid_objects["cube_green"] = self.cube_green
+        # self.scene.rigid_objects["cube_blue"] = self.cube_blue
+        # self.scene.rigid_objects["table"] = self.table
+        
+        self.robot_test = self.scene.articulations["robot"]
+        self.cube_red = self.scene.rigid_objects["red_cube"]
+        self.cube_green = self.scene.rigid_objects["green_cube"]
+        self.cube_blue = self.scene.rigid_objects["blue_cube"]
     
         # add ground plane
         spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
