@@ -53,15 +53,25 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
         self.cube_green = RigidObject(self.cfg.green_cube_cfg)
         self.cube_blue = RigidObject(self.cfg.blue_cube_cfg)
 
+        self.table = RigidObject(self.cfg.table_cfg)
+        self.side_panel = RigidObject(self.cfg.side_panel_cfg)
+        
+        self.robot_test = Articulation(self.cfg.robot_cfg)
+        
+        # clone and replicate
+        self.scene.clone_environments(copy_from_source=False)
+
+        self.scene.articulations["robot_test"] = self.robot_test
+        
         self.scene.rigid_objects["cube_red"] = self.cube_red
         self.scene.rigid_objects["cube_green"] = self.cube_green
         self.scene.rigid_objects["cube_blue"] = self.cube_blue
-
+        self.scene.rigid_objects["table"] = self.table
+        self.scene.rigid_objects["side_panel"] = self.side_panel
+    
         # add ground plane
         spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
 
-        # clone and replicate
-        self.scene.clone_environments(copy_from_source=False)
         # we need to explicitly filter collisions for CPU simulation
         if self.device == "cpu":
             self.scene.filter_collisions(global_prim_paths=[])
