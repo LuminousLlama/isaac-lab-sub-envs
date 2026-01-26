@@ -35,10 +35,12 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
         # self.sub_env_1 = SubEnv1(self, 1)
         # self.sub_env_2 = SubEnv2(self, 2)
         self.sub_env_ability = SubEnvAbility(self, 0)
-        self.num_sub_envs = 1
+        self.sub_env_shadow = SubEnvShadow(self, 1)
+        self.num_sub_envs = 2
 
         self.sub_envs_dict = {
             "ability": self.sub_env_ability,
+            "shadow": self.sub_env_shadow
         }
 
         super().__init__(cfg, render_mode, **kwargs)
@@ -46,13 +48,16 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
         self.sub_envs_episode_length_buf = torch.zeros(
             self.num_sub_envs, self.num_envs, device=self.device
         )
-
+        
+        
+        self.sub_env_ability.post_scene_setup(self.robot_ability)
+        self.sub_env_shadow.post_scene_setup(self.robot_shadow)
+    
     def _setup_scene(self):
 
         self.robot_ability = self.scene.articulations["robot_ability"]
         self.robot_shadow = self.scene.articulations["robot_shadow"]
         
-
         # add ground plane
         spawn_ground_plane(prim_path="/World/ground", cfg=GroundPlaneCfg())
 
@@ -64,24 +69,25 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
         light_cfg = sim_utils.DomeLightCfg(intensity=2000.0, color=(0.75, 0.75, 0.75))
         light_cfg.func("/World/Light", light_cfg)
 
-        # setup sub envs
-        # self.sub_env_0._rigid_objects["cube_red"] = self.cube_red
-        # self.sub_env_1._rigid_objects["cube_green"] = self.cube_green
-        # self.sub_env_2._rigid_objects["cube_blue"] = self.cube_blue
-        
-        # setup sub envs
-        self.sub_env_ability._articulations["robot_ability"] = self.robot_ability
-
 
     def _pre_physics_step(self, actions: dict[str, torch.Tensor]) -> None:
         
         for name, sub_env in self.sub_envs_dict.items():
             sub_env: SubEnv 
-            sub_env.actions = actions[name]
+            
+            lower_limits = sub_env.robot_lower_pos_joint_limits
+            upper_limits = sub_env.robot_upper_pos_joint_limits
+            range = upper_limits - lower_limits
+            
+            raw_actions = actions[name]
+            final_actions = lower_limits + (raw_actions + 1.0) * 0.5 * range 
+            
+            sub_env.actions = final_actions
 
     def _apply_action(self) -> None:
         for sub_env in self.sub_envs_dict.values():
             sub_env: SubEnv
+            
             sub_env._apply_action()
 
     def _get_observations(self) -> dict[str, torch.Tensor]:
@@ -108,7 +114,8 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
             terminated[name] = sub_env._get_terminated()
 
         truncated = {
-            "ability": torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+            "ability": self.sub_envs_episode_length_buf[0] >= self.max_episode_length / 2,
+            "shadow": self.sub_envs_episode_length_buf[1] >= self.max_episode_length / 3,
             # "cube_red": torch.zeros(
             #     self.num_envs, dtype=torch.bool, device=self.device
             # ),
@@ -274,10 +281,13 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
 # ---------
 
 class SubEnvAbility(SubEnv):
+    def post_scene_setup(self, robot: Articulation):
+        self.robot = robot
+        self.robot_lower_pos_joint_limits = robot.data.soft_joint_pos_limits[..., 0]
+        self.robot_upper_pos_joint_limits = robot.data.soft_joint_pos_limits[..., 1]
     
     def _apply_action(self):
-        print(self.actions)
-        self.robot_ability.set_joint_position_target(self.actions)
+        self.robot.set_joint_position_target(self.actions)
     
     def _get_observations(self):
         return torch.zeros(1, device=self.env.device)
@@ -291,20 +301,52 @@ class SubEnvAbility(SubEnv):
     def _reset(self, env_ids):
         super()._reset(env_ids)
         
-        self.robot_ability: Articulation = self._articulations["robot_ability"]
-
-        default_root_state = self.robot_ability.data.default_root_state[env_ids].clone()
+        default_root_state = self.robot.data.default_root_state[env_ids].clone()
         default_root_state[:, :3] += self.env.scene.env_origins[env_ids]
         
-        joint_pos = self.robot_ability.data.default_joint_pos[env_ids].clone()
+        joint_pos = self.robot.data.default_joint_pos[env_ids].clone()
         
-        joint_vel = self.robot_ability.data.default_joint_vel[env_ids].clone()
+        joint_vel = self.robot.data.default_joint_vel[env_ids].clone()
         
-        self.robot_ability.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
-        self.robot_ability.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
+        self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
+        self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
        
-        self.robot_ability.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
+        self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
+
+class SubEnvShadow(SubEnv):
+    
+    def post_scene_setup(self, robot: Articulation):
+        self.robot = robot
+        self.robot_lower_pos_joint_limits = self.robot.data.soft_joint_pos_limits[..., 0]
+        self.robot_upper_pos_joint_limits = self.robot.data.soft_joint_pos_limits[..., 1]
+
+    def _apply_action(self):
+        self.robot.set_joint_position_target(self.actions)
+    
+    def _get_observations(self):
+        return torch.zeros(1, device=self.env.device)
+        
+    def _get_rewards(self):
+        return torch.zeros(1, device=self.env.device)
+
+    def _get_terminated(self):
+        return torch.zeros(self.env.num_envs, dtype=bool, device=self.env.device)
+        
+    def _reset(self, env_ids):
+        super()._reset(env_ids)
+        
+        default_root_state = self.robot.data.default_root_state[env_ids].clone()
+        default_root_state[:, :3] += self.env.scene.env_origins[env_ids]
+        
+        joint_pos = self.robot.data.default_joint_pos[env_ids].clone()
+        
+        joint_vel = self.robot.data.default_joint_vel[env_ids].clone()
+        
+        self.robot.write_root_pose_to_sim(default_root_state[:, :7], env_ids)
+        self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
+       
+        self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
 
 # class SubEnv0(SubEnv):
 

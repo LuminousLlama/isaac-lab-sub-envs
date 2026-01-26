@@ -26,11 +26,13 @@ import numpy as np
 
 SUB_ENV_OFFSET = np.array([0, 2.0, 0.0])
 
-ROBOT_INIT_POS = np.array([-0.5, 0.0, 0.8])
+ROBOT_INIT_POS = np.array([-0.5, 0.0, 0.75])
 
 TABLE_SCALE = [1.0, 1.5, 1.0]
 TABLE_USD_PATH = f"{ISAAC_NUCLEUS_DIR}/IsaacLab/Mimic/exhaust_pipe_task/exhaust_pipe_assets/table.usd"
 TABLE_INIT_POS = np.array([0.0, 0.0, 0.0])
+
+OBJECT_POSE = np.array([0.15, 0.0, 0.8])
 
 @configclass
 class SubEnvs2SceneCfg(InteractiveSceneCfg):
@@ -47,10 +49,9 @@ class SubEnvs2SceneCfg(InteractiveSceneCfg):
             ),
         ),
         init_state=ArticulationCfg.InitialStateCfg(
-            pos= (ROBOT_INIT_POS + 0 * SUB_ENV_OFFSET).tolist(),
+            pos=(ROBOT_INIT_POS + 0 * SUB_ENV_OFFSET).tolist(),
         ),
-        
-        # TODO this needs to actually reflect the mimic / under actuation of ability 
+        # TODO this needs to actually reflect the mimic / under actuation of ability
         actuators={
             "all_joints": ImplicitActuatorCfg(
                 joint_names_expr=[".*"],
@@ -61,9 +62,6 @@ class SubEnvs2SceneCfg(InteractiveSceneCfg):
             ),
         },
     )
-    
-    
-    
 
     robot_shadow: ArticulationCfg = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/RobotShadow",
@@ -89,6 +87,25 @@ class SubEnvs2SceneCfg(InteractiveSceneCfg):
         },
     )
 
+    # grasping objects
+    
+    cube_ability = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Cube",
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=OBJECT_POSE.tolist()
+        ),
+        
+        spawn=sim_utils.UsdFileCfg(
+            usd_path=f"source/sub_envs2/assets/ycb_assets_usd/rubkis_cube.usd",
+            scale=(1.0, 1.0, 1.0),
+            rigid_props=sim_utils.RigidBodyPropertiesCfg(
+                solver_position_iteration_count=16,
+                solver_velocity_iteration_count=1,
+                max_depenetration_velocity=5.0,
+                disable_gravity=False,
+            ),
+        ),
+    )
 
     # TABLES
     table_ability: AssetBaseCfg = AssetBaseCfg(
@@ -98,11 +115,10 @@ class SubEnvs2SceneCfg(InteractiveSceneCfg):
             scale=TABLE_SCALE,
         ),
         init_state=AssetBaseCfg.InitialStateCfg(
-            pos= (TABLE_INIT_POS + 0 * SUB_ENV_OFFSET).tolist(),
+            pos=(TABLE_INIT_POS + 0 * SUB_ENV_OFFSET).tolist(),
         ),
     )
-    
-    
+
     table_shadow: AssetBaseCfg = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/TableShadow",
         spawn=sim_utils.UsdFileCfg(
@@ -122,7 +138,7 @@ class SubEnvs2MarlEnvCfg(DirectMARLEnvCfg):
     episode_length_s = 2.0
 
     possible_agents = ["ability", "shadow"]
-    action_spaces = {"ability": 16, "shadow": 1} # TODO SHADOW
+    action_spaces = {"ability": 16, "shadow": 28}
     observation_spaces = {"ability": 3, "shadow": 3}
     state_space = 0
 
@@ -135,4 +151,3 @@ class SubEnvs2MarlEnvCfg(DirectMARLEnvCfg):
         env_spacing=10.0,
         replicate_physics=True,
     )
-    

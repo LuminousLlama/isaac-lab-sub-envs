@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from isaaclab.scene.interactive_scene import InteractiveScene
+from isaaclab.assets import Articulation
 
 import torch
 
@@ -23,6 +24,13 @@ class SubEnv:
         self._extras = dict()
         
         self.actions: torch.Tensor = None
+        
+        self.robot: Articulation = None
+        self.robot_lower_pos_joint_limits = None
+        self.robot_upper_pos_joint_limits = None
+        
+    def post_scene_setup(self):
+        pass
         
     def _apply_action(self) -> None:
         pass
