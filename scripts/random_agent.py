@@ -52,12 +52,20 @@ def main():
     print(f"[INFO]: Gym action space: {env.action_space}")
     # reset environment
     env.reset()
+    
+    
+    base_env = env.unwrapped
     # simulate environment
     while simulation_app.is_running():
         # run everything in inference mode
         with torch.inference_mode():
-            # sample actions from -1 to 1
-            actions = 2 * torch.rand(env.action_space.shape, device=env.unwrapped.device) - 1
+            actions = {}
+
+            for agent in base_env.possible_agents:
+                space = base_env.action_space(agent)
+                act_shape = (base_env.num_envs, *space.shape)
+                actions[agent] = 2.0 * torch.rand(act_shape, device=base_env.device) - 1
+            
             # apply actions
             env.step(actions)
 
