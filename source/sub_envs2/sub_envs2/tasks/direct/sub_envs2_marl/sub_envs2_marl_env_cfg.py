@@ -34,11 +34,31 @@ TABLE_INIT_POS = np.array([0.0, 0.0, 0.0])
 
 OBJECT_POSE = np.array([0.15, 0.0, 0.8])
 
+# https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Props/YCB/Axis_Aligned_Physics/003_cracker_box.usd
+# https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Props/YCB/Axis_Aligned_Physics/004_sugar_box.usd
+# https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Props/YCB/Axis_Aligned_Physics/005_tomato_soup_can.usd
+# https://omniverse-content-production.s3-us-west-2.amazonaws.com/Assets/Isaac/5.1/Isaac/Props/YCB/Axis_Aligned_Physics/006_mustard_bottle.usd
+OBJECT_ASSET_CFGS = [
+    sim_utils.UsdFileCfg(
+        usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/YCB/Axis_Aligned_Physics/006_mustard_bottle.usd",
+    ),
+    sim_utils.UsdFileCfg(
+        usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/YCB/Axis_Aligned_Physics/003_cracker_box.usd",
+    ),
+    sim_utils.UsdFileCfg(
+        usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/YCB/Axis_Aligned_Physics/004_sugar_box.usd",
+    ),
+    sim_utils.UsdFileCfg(
+        usd_path=f"{ISAAC_NUCLEUS_DIR}/Props/YCB/Axis_Aligned_Physics/005_tomato_soup_can.usd",
+    ),
+]
+
+
 @configclass
 class SubEnvs2SceneCfg(InteractiveSceneCfg):
     """Scene configuration for SubEnvs2 with robot and table."""
 
-    # Spawn robots
+    # ---- Robots ----
     robot_ability: ArticulationCfg = ArticulationCfg(
         prim_path="{ENV_REGEX_NS}/RobotAbility",
         spawn=sim_utils.UsdFileCfg(
@@ -87,27 +107,32 @@ class SubEnvs2SceneCfg(InteractiveSceneCfg):
         },
     )
 
-    # grasping objects
-    
-    cube_ability = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/Cube",
+    # ----- grasping objects -----
+    # TODO maybe we can make this a rigid body object collection to improve efficiency 
+
+    object_ability = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/ObjectAbility",
         init_state=RigidObjectCfg.InitialStateCfg(
-            pos=OBJECT_POSE.tolist()
+            pos=(OBJECT_POSE + 0 * SUB_ENV_OFFSET).tolist(),
         ),
-        
-        spawn=sim_utils.UsdFileCfg(
-            usd_path=f"source/sub_envs2/assets/ycb_assets_usd/rubkis_cube.usd",
-            scale=(1.0, 1.0, 1.0),
-            rigid_props=sim_utils.RigidBodyPropertiesCfg(
-                solver_position_iteration_count=16,
-                solver_velocity_iteration_count=1,
-                max_depenetration_velocity=5.0,
-                disable_gravity=False,
-            ),
-        ),
+        spawn=sim_utils.MultiAssetSpawnerCfg(
+           assets_cfg=OBJECT_ASSET_CFGS,
+           random_choice=True
+        )
     )
 
-    # TABLES
+    object_shadow = RigidObjectCfg(
+        prim_path="{ENV_REGEX_NS}/Shadow",
+        init_state=RigidObjectCfg.InitialStateCfg(
+            pos=(OBJECT_POSE + 1 * SUB_ENV_OFFSET).tolist(),
+        ),
+        spawn=sim_utils.MultiAssetSpawnerCfg(
+           assets_cfg=OBJECT_ASSET_CFGS,
+           random_choice=True
+        )
+    )
+    # ---- TABLES ------
+    # TODO maybe we can make this a rigid body object collection to improve efficiency 
     table_ability: AssetBaseCfg = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/TableAbility",
         spawn=sim_utils.UsdFileCfg(
@@ -149,5 +174,6 @@ class SubEnvs2MarlEnvCfg(DirectMARLEnvCfg):
     scene: SubEnvs2SceneCfg = SubEnvs2SceneCfg(
         num_envs=10,
         env_spacing=10.0,
-        replicate_physics=True,
+        # false because we have different objects in different envs
+        replicate_physics=False,
     )
