@@ -30,12 +30,10 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
         self, cfg: SubEnvs2MarlEnvCfg, render_mode: str | None = None, **kwargs
     ):
 
-        # create and add sub envs to dict. Need to call this before super because super calls other functions like _setup_scene()
-        # self.sub_env_0 = SubEnv0(self, 0)
-        # self.sub_env_1 = SubEnv1(self, 1)
-        # self.sub_env_2 = SubEnv2(self, 2)
-        self.sub_env_ability = SubEnvAbility(self, 0)
-        self.sub_env_shadow = SubEnvShadow(self, 1)
+        super().__init__(cfg, render_mode, **kwargs)
+
+        self.sub_env_ability = SubEnvAbility(self, 0, self.robot_ability)
+        self.sub_env_shadow = SubEnvShadow(self, 1, self.robot_shadow)
         self.num_sub_envs = 2
 
         self.sub_envs_dict = {
@@ -43,15 +41,9 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
             "shadow": self.sub_env_shadow
         }
 
-        super().__init__(cfg, render_mode, **kwargs)
-
         self.sub_envs_episode_length_buf = torch.zeros(
             self.num_sub_envs, self.num_envs, device=self.device
         )
-        
-        
-        self.sub_env_ability.post_scene_setup(self.robot_ability)
-        self.sub_env_shadow.post_scene_setup(self.robot_shadow)
     
     def _setup_scene(self):
 
@@ -281,11 +273,13 @@ class SubEnvs2MarlEnv(DirectMARLEnv):
 # ---------
 
 class SubEnvAbility(SubEnv):
-    def post_scene_setup(self, robot: Articulation):
+    def __init__(self, env, subscene_idx, robot: Articulation):
+        super().__init__(env, subscene_idx)
+
         self.robot = robot
         self.robot_lower_pos_joint_limits = robot.data.soft_joint_pos_limits[..., 0]
         self.robot_upper_pos_joint_limits = robot.data.soft_joint_pos_limits[..., 1]
-    
+
     def _apply_action(self):
         self.robot.set_joint_position_target(self.actions)
     
@@ -315,8 +309,8 @@ class SubEnvAbility(SubEnv):
 
 
 class SubEnvShadow(SubEnv):
-    
-    def post_scene_setup(self, robot: Articulation):
+    def __init__(self, env, subscene_idx, robot: Articulation):
+        super().__init__(env, subscene_idx)
         self.robot = robot
         self.robot_lower_pos_joint_limits = self.robot.data.soft_joint_pos_limits[..., 0]
         self.robot_upper_pos_joint_limits = self.robot.data.soft_joint_pos_limits[..., 1]
@@ -347,89 +341,3 @@ class SubEnvShadow(SubEnv):
         self.robot.write_root_velocity_to_sim(default_root_state[:, 7:], env_ids)
        
         self.robot.write_joint_state_to_sim(joint_pos, joint_vel, env_ids=env_ids)
-
-# class SubEnv0(SubEnv):
-
-#     def _apply_action(self):
-#         self.cube_red: RigidObject = self._rigid_objects["cube_red"]
-
-#         current_vel_red = self.cube_red.data.root_link_vel_w
-#         current_vel_red[:, 2] = self.actions[:, 0] * 1
-#         self.cube_red.write_root_link_velocity_to_sim(current_vel_red)
-
-#     def _get_observations(self):
-#         return self.cube_red.data.root_pos_w
-    
-#     def _get_rewards(self):
-#         return torch.zeros(self.env.num_envs, device=self.env.device)
-
-#     def _get_terminated(self):
-#         return torch.rand(self.env.num_envs, device=self.env.device) < 0.01
-    
-#     def _reset(self, env_ids):
-#         super()._reset(env_ids)
-
-#         self.cube_red: RigidObject = self._rigid_objects["cube_red"]
-#         default_red_state = self.cube_red.data.default_root_state[env_ids].clone()
-#         default_red_state[:, :3] += self.env.scene.env_origins[env_ids]
-
-#         self.cube_red.write_root_pose_to_sim(default_red_state[:, :7], env_ids)
-#         self.cube_red.write_root_velocity_to_sim(default_red_state[:, 7:], env_ids)
-
-
-# class SubEnv1(SubEnv):
-
-#     def _apply_action(self):
-#         self.cube_green: RigidObject = self._rigid_objects["cube_green"]
-
-#         current_vel_red = self.cube_green.data.root_link_vel_w
-#         current_vel_red[:, 2] = self.actions[:, 0] * 1
-#         self.cube_green.write_root_link_velocity_to_sim(current_vel_red)
-
-#     def _get_observations(self):
-#         return self.cube_green.data.root_pos_w
-    
-#     def _get_rewards(self):
-#         return torch.zeros(self.env.num_envs, device=self.env.device)
-
-#     def _get_terminated(self):
-#         return torch.rand(self.env.num_envs, device=self.env.device) < 0.01
-
-#     def _reset(self, env_ids):
-#         super()._reset(env_ids)
-
-#         self.cube_green: RigidObject = self._rigid_objects["cube_green"]
-#         default_green_state = self.cube_green.data.default_root_state[env_ids].clone()
-#         default_green_state[:, :3] += self.env.scene.env_origins[env_ids]
-
-#         self.cube_green.write_root_pose_to_sim(default_green_state[:, :7], env_ids)
-#         self.cube_green.write_root_velocity_to_sim(default_green_state[:, 7:], env_ids)
-
-
-# class SubEnv2(SubEnv):
-
-#     def _apply_action(self):
-#         self.cube_blue: RigidObject = self._rigid_objects["cube_blue"]
-
-#         current_vel_red = self.cube_blue.data.root_link_vel_w
-#         current_vel_red[:, 2] = self.actions[:, 0] * 1
-#         self.cube_blue.write_root_link_velocity_to_sim(current_vel_red)
-
-#     def _get_observations(self):
-#         return self.cube_blue.data.root_pos_w
-    
-#     def _get_rewards(self):
-#         return torch.zeros(self.env.num_envs, device=self.env.device)
-
-#     def _get_terminated(self):
-#         return torch.rand(self.env.num_envs, device=self.env.device) < 0.01
-
-#     def _reset(self, env_ids):
-#         super()._reset(env_ids)
-
-#         self.cube_blue: RigidObject = self._rigid_objects["cube_blue"]
-#         default_blue_state = self.cube_blue.data.default_root_state[env_ids].clone()
-#         default_blue_state[:, :3] += self.env.scene.env_origins[env_ids]
-
-#         self.cube_blue.write_root_pose_to_sim(default_blue_state[:, :7], env_ids)
-#         self.cube_blue.write_root_velocity_to_sim(default_blue_state[:, 7:], env_ids)
